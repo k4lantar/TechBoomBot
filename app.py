@@ -9,6 +9,7 @@ from datetime import datetime
 import hashlib
 import json
 import logging
+import asyncio
 
 # تنظیمات لگاری
 logging.basicConfig(level=logging.INFO)
@@ -346,11 +347,12 @@ async def initialize_app():
 
 # Main function to run the app
 def run_app():
-    import hypercorn
+    import hypercorn.asyncio
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    hypercorn.run(app, config)  # اجرای همگام با hypercorn.run
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(hypercorn.asyncio.serve(app, config))
 
 if __name__ == "__main__":
     run_app()

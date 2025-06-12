@@ -1,6 +1,6 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, ChatMemberHandler
 import sqlite3
 from flask import Flask, request, jsonify
 import os
@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime
 import hashlib
 import json
-import asyncio  # اضافه کردن این خط
 import logging
 
 # تنظیمات لگاری
@@ -67,6 +66,10 @@ def get_setting(key, default=None):
         c.execute("SELECT value FROM settings WHERE key = ?", (key,))
         result = c.fetchone()
         return json.loads(result[0]) if result and key in ["apple_id_prices", "gift_card_prices", "vpn_prices", "virtual_number_prices"] else result[0] if result else default
+
+# Handle chat member updates
+async def handle_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Chat member update processed: %s", update.my_chat_member)
 
 # Show intro
 async def show_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -326,6 +329,7 @@ async def initialize_app():
         init_db()
         telegram_app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
         await telegram_app.initialize()
+        telegram_app.add_handler(ChatMemberHandler(handle_chat_member))
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
@@ -346,7 +350,7 @@ def run_app():
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+    hypercorn.asyncio.serve(app, config)  # اجرای مستقیم بدون asyncio.run
 
 if __name__ == "__main__":
     run_app()

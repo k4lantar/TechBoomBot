@@ -371,6 +371,8 @@ async def initialize_app():
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
+        # اضافه کردن handler برای خطاها
+        telegram_app.add_error_handler(lambda update, context: logger.error("Exception while handling an update:", exc_info=context.error))
         logger.info("Setting webhook: %s", WEBHOOK_URL)
         await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
         logger.info("Webhook set successfully")

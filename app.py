@@ -351,8 +351,12 @@ def run_app():
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(hypercorn.asyncio.serve(app, config))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(hypercorn.asyncio.serve(app, config))
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     run_app()

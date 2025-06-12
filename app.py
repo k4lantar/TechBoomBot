@@ -21,8 +21,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/w
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 # SQLite database setup
 def init_db():
@@ -336,6 +334,8 @@ async def webhook():
     update = telegram.Update.de_json(request.get_json(), telegram_app.bot)
     logger.info("Processing update: %s", update)
     try:
+        # استفاده از Event Loop پیش‌فرض
+        loop = asyncio.get_event_loop()
         await telegram_app.process_update(update)
     except Exception as e:
         logger.error("Error in webhook: %s", str(e))
@@ -356,7 +356,7 @@ async def initialize_app():
         await telegram_app.initialize()
         telegram_app.add_handler(ChatMemberHandler(handle_new_chat))
         telegram_app.add_handler(CommandHandler("start", show_intro))
-        telegram_app.add_handler(CommandHandler("admin", show_admin_menu))  # اضافه کردن Handler جداگانه برای /admin
+        telegram_app.add_handler(CommandHandler("admin", show_admin_menu))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
@@ -376,6 +376,7 @@ def run_app():
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
+    # استفاده از Event Loop پیش‌فرض Hypercorn
     asyncio.run(hypercorn.asyncio.serve(app, config))
 
 if __name__ == "__main__":

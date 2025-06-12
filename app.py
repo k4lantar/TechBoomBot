@@ -131,7 +131,8 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-        balance = c.fetchone()[0] if c.fetchone() else 0
+        result = c.fetchone()
+        balance = result[0] if result else 0  # اگه نتیجه None بود، 0 برگردون
     if text == "💳 کیف پول":
         await update.message.reply_text(f"موجودی شما: {balance:,} تومان")
     elif text == "📚 راهنمایی":
@@ -363,6 +364,7 @@ async def initialize_app():
     global telegram_app
     try:
         init_db()
+        loop = asyncio.get_event_loop()
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
@@ -371,7 +373,6 @@ async def initialize_app():
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
-        # اضافه کردن handler برای خطاها
         telegram_app.add_error_handler(lambda update, context: logger.error("Exception while handling an update:", exc_info=context.error))
         logger.info("Setting webhook: %s", WEBHOOK_URL)
         await telegram_app.bot.set_webhook(url=WEBHOOK_URL)

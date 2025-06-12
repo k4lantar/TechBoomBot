@@ -235,86 +235,43 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    if str(user_id) != str(ADMIN_ID):
+    if str(user_id) != str(os.getenv("ADMIN_ID")):  # استفاده از متغیر محیطی
         await query.message.reply_text("فقط ادمین اصلی!")
         return
     data = query.data
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         if data == "broadcast":
-            await query.message.reply_text("متن پیام رو بفرست:")
-            context.user_data["awaiting_broadcast"] = True
+            await query.message.reply_text("متن پیام رو ارسال کنید برای برادکست.")
+            context.user_data["mode"] = "broadcast"
         elif data == "add_admin":
-            await query.message.reply_text("ID همکار رو بفرست:")
-            context.user_data["awaiting_admin"] = True
+            await query.message.reply_text("ID ادمین جدید رو ارسال کنید.")
+            context.user_data["mode"] = "add_admin"
         elif data == "search_service":
-            await query.message.reply_text("نوع سرویس (apple, vpn, gift, virtual) و ID رو بفرست:")
-            context.user_data["awaiting_search"] = True
+            await query.message.reply_text("جستجوی سرویس فعال شد!")
+            # اینجا می‌تونی منطق جستجو رو اضافه کنی
         elif data == "add_balance":
-            await query.message.reply_text("ID کاربر و مبلغ رو بفرست:")
-            context.user_data["awaiting_balance"] = True
+            await query.message.reply_text("ID کاربر و مقدار رو ارسال کنید (مثال: 123 5000).")
+            context.user_data["mode"] = "add_balance"
         elif data == "confirm_payments":
-            c.execute("SELECT id, user_id, amount FROM transactions WHERE status = 'pending' AND admin_confirmed = 0")
-            pending = c.fetchall()
-            if not pending:
-                await query.message.reply_text("هیچ پرداختی در انتظار نیست!")
-                return
-            keyboard = [[InlineKeyboardButton(f"تراکنش {p[0]} - {p[1]} - {p[2]:,}", callback_data=f"confirm_{p[0]}")] for p in pending]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text("پرداخت‌های در انتظار:", reply_markup=reply_markup)
+            await query.message.reply_text("لیست پرداخت‌های در انتظار:")
+            c.execute("SELECT * FROM payments WHERE status = 'pending'")
+            payments = c.fetchall()
+            if payments:
+                response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]}" for p in payments])
+                await query.message.reply_text(response)
+            else:
+                await query.message.reply_text("هیچ پرداختی در انتظار نیست.")
         elif data == "bot_stats":
             c.execute("SELECT COUNT(*) FROM users")
             user_count = c.fetchone()[0]
             await query.message.reply_text(f"تعداد کاربران: {user_count}")
         elif data == "user_stats":
-            c.execute("SELECT COUNT(*) FROM users WHERE is_blocked = 0")
-            active = c.fetchone()[0]
-            c.execute("SELECT COUNT(*) FROM users WHERE is_blocked = 1")
-            blocked = c.fetchone()[0]
-            await query.message.reply_text(f"فعال: {active} | بلاک: {blocked}")
+            await query.message.reply_text("ID کاربر رو ارسال کنید برای آمار.")
+            context.user_data["mode"] = "user_stats"
         elif data == "adjust_balance":
-            await query.message.reply_text("ID کاربر و مبلغ (مثبت/منفی) رو بفرست:")
-            context.user_data["awaiting_adjust"] = True
-
-# Handle admin text input
-async def handle_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if str(user_id) != str(ADMIN_ID):
-        return
-    text = update.message.text
-    with sqlite3.connect("shop.db") as conn:
-        c = conn.cursor()
-        if "awaiting_broadcast" in context.user_data:
-            c.execute("SELECT user_id FROM users WHERE is_blocked = 0")
-            users = c.fetchall()
-            for user in users:
-                await context.bot.send_message(chat_id=user[0], text=text)
-            del context.user_data["awaiting_broadcast"]
-            await update.message.reply_text("پیام همگانی ارسال شد!")
-        elif "awaiting_admin" in context.user_data:
-            new_admin_id = int(text)
-            c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (new_admin_id,))
-            conn.commit()
-            del context.user_data["awaiting_admin"]
-            await update.message.reply_text(f"همکار {new_admin_id} اضافه شد!")
-        elif "awaiting_search" in context.user_data:
-            service, service_id = text.split()
-            c.execute(f"SELECT * FROM {service}_ids WHERE id = ?", (int(service_id),))
-            result = c.fetchone()
-            await update.message.reply_text(f"جزئیات: {result}")
-            del context.user_data["awaiting_search"]
-        elif "awaiting_balance" in context.user_data:
-            user_id, amount = map(int, text.split())
-            c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-            conn.commit()
-            del context.user_data["awaiting_balance"]
-            await update.message.reply_text(f"موجودی کاربر {user_id} افزایش یافت!")
-        elif "awaiting_adjust" in context.user_data:
-            user_id, amount = map(int, text.split())
-            c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-            conn.commit()
-            del context.user_data["awaiting_adjust"]
-            await update.message.reply_text(f"موجودی کاربر {user_id} به {amount} تغییر کرد!")
+            await query.message.reply_text("ID کاربر و مقدار جدید رو ارسال کنید (مثال: 123 10000).")
+            context.user_data["mode"] = "adjust_balance"
 
 # Handle payment confirmation
 async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -361,11 +318,14 @@ def health():
 
 # Initialize application
 import asyncio
+
+telegram_app = None
+
 async def initialize_app():
     global telegram_app
     try:
         init_db()
-        loop = asyncio.new_event_loop()  # ایجاد یه Event Loop جدید
+        loop = asyncio.new_event_loop()  # ایجاد Event Loop جدید
         asyncio.set_event_loop(loop)
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
         await telegram_app.initialize()
@@ -382,6 +342,18 @@ async def initialize_app():
     except Exception as e:
         logger.error("Error in initialize_app: %s", str(e))
         telegram_app = None
+
+def run_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_app())
+    if telegram_app:
+        loop.run_until_complete(telegram_app.run_webhook(listen="0.0.0.0", port=int(os.getenv("PORT", 8080)), url_path="webhook"))
+    else:
+        logger.error("Failed to initialize Telegram app")
+
+if __name__ == "__main__":
+    run_bot()
 
 # Main function to run the app
 def run_app():

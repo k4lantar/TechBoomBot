@@ -235,7 +235,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    if str(user_id) != str(os.getenv("ADMIN_ID")):  # استفاده از متغیر محیطی
+    if str(user_id) != str(os.getenv("ADMIN_ID")):
         await query.message.reply_text("فقط ادمین اصلی!")
         return
     data = query.data
@@ -249,7 +249,6 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data["mode"] = "add_admin"
         elif data == "search_service":
             await query.message.reply_text("جستجوی سرویس فعال شد!")
-            # اینجا می‌تونی منطق جستجو رو اضافه کنی
         elif data == "add_balance":
             await query.message.reply_text("ID کاربر و مقدار رو ارسال کنید (مثال: 123 5000).")
             context.user_data["mode"] = "add_balance"
@@ -296,15 +295,15 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
 async def webhook():
     global telegram_app
     logger.info("Webhook received: %s", request.get_json())
+    if telegram_app is None:
+        logger.info("Initializing telegram_app...")
+        await initialize_app()
+    if telegram_app is None:
+        logger.error("Failed to initialize telegram_app")
+        return "Bot initialization failed", 500
+    update = telegram.Update.de_json(request.get_json(), telegram_app.bot)
+    logger.info("Processing update: %s", update)
     try:
-        if telegram_app is None:
-            logger.info("Initializing telegram_app...")
-            await initialize_app()
-        if telegram_app is None:
-            logger.error("Failed to initialize telegram_app")
-            return "Bot initialization failed", 500
-        update = telegram.Update.de_json(request.get_json(), telegram_app.bot)
-        logger.info("Processing update: %s", update)
         await telegram_app.process_update(update)
     except Exception as e:
         logger.error("Error in webhook: %s", str(e))
@@ -320,7 +319,7 @@ def health():
 async def initialize_app():
     global telegram_app
     try:
-        init_db()  # فراخوانی تابع ساخت دیتابیس
+        init_db()
         telegram_app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
@@ -329,7 +328,7 @@ async def initialize_app():
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
-        telegram_app.add_error_handler(lambda update, context: logger.error("Exception while handling an update:", exc_info=context.error))
+        telegram_app.add_error_handler(error_handler)  # استفاده از تابع Error Handler
         logger.info("Setting webhook: %s", os.getenv("WEBHOOK_URL"))
         await telegram_app.bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
         logger.info("Webhook set successfully")
@@ -337,9 +336,14 @@ async def initialize_app():
         logger.error("Error in initialize_app: %s", str(e))
         telegram_app = None
 
+# Error Handler
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
 # Main function to run the app
 def run_app():
-    loop = asyncio.get_event_loop()  # استفاده از Event Loop پیش‌فرض
+    loop = asyncio.new_event_loop()  # ایجاد Event Loop جدید
+    asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(initialize_app())
         from hypercorn.config import Config

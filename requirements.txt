@@ -1,3 +1,4 @@
 flask[async]
 python-telegram-bot==20.6
 hypercorn
+python-telegram-bot[webhooks]

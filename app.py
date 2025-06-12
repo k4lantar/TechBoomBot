@@ -36,9 +36,10 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)''')
         default_settings = [
-            ("welcome_message", "🌍 به TechBoomBot خوش اومدی! 😎\n📲 شماره‌ات رو به اشتراک بذار."),
-            ("contact_saved_message", "✅ شماره‌ات ثبت شد! از منو استفاده کن."),
-            ("insufficient_balance_message", "❌ موجودی کافی نیست! {amount:,} تومان واریز کن."),
+            ("welcome_message", "🌍 به TechBoomBot خوش اومدی! 😎\n📲 شماره‌ات رو به اشتراک بذار تا شروع کنیم."),
+            ("contact_saved_message", "✅ شماره‌ات ثبت شد! حالا می‌تونی از منو استفاده کنی."),
+            ("insufficient_balance_message", "❌ موجودی کافی نیست! {amount:,} تومان شارژ کن."),
+            ("trial_message", "🎉 خوش اومدی به TechBoomBot! رباتی برای خرید VPN، اپل آیدی و شماره مجازی. با /start شروع کن! 🚀"),
             ("menu_enabled", "1"),
             ("admin_commands_enabled", "1"),
             ("apple_id_prices", json.dumps({
@@ -54,7 +55,8 @@ def init_db():
                 "OpenVPN": {"10GB": {1: 45000, 3: 130000}, "50GB": {1: 75000, 3: 210000}, "Unlimited": {1: 110000, 3: 320000}}
             })),
             ("gift_card_prices", json.dumps({20000: 20000, 30000: 30000, 50000: 50000, 100000: 100000, 200000: 200000})),
-            ("virtual_number_prices", json.dumps({"US": 5000, "UK": 6000, "TR": 7000, "AE": 6500}))
+            ("virtual_number_prices", json.dumps({"US": 5000, "UK": 6000, "TR": 7000, "AE": 6500})),
+            ("charge_options", json.dumps([50000, 100000, 200000, 500000]))  # گزینه‌های افزایش موجودی
         ]
         c.executemany("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", default_settings)
         c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (ADMIN_ID,))
@@ -66,11 +68,18 @@ def get_setting(key, default=None):
         c = conn.cursor()
         c.execute("SELECT value FROM settings WHERE key = ?", (key,))
         result = c.fetchone()
-        return json.loads(result[0]) if result and key in ["apple_id_prices", "gift_card_prices", "vpn_prices", "virtual_number_prices"] else result[0] if result else default
+        return json.loads(result[0]) if result and key in ["apple_id_prices", "gift_card_prices", "vpn_prices", "virtual_number_prices", "charge_options"] else result[0] if result else default
 
-# Handle chat member updates
-async def handle_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Chat member update processed: %s", update.my_chat_member)
+# Handle new chat member (show trial message)
+async def handle_new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.chat.id
+    with sqlite3.connect("shop.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+        if not c.fetchone():
+            keyboard = [[InlineKeyboardButton("شروع کنید! 🚀", callback_data="start_trial")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(get_setting("trial_message"), reply_markup=reply_markup)
 
 # Show intro
 async def show_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -94,7 +103,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [KeyboardButton("🍎 اپل آیدی")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("🔥 TechBoomBot! 🚀\nانتخاب کن:", reply_markup=reply_markup)
+    await update.message.reply_text("🔥 خوش اومدی به TechBoomBot! 🚀\nانتخاب کن:", reply_markup=reply_markup)
 
 # Handle contact
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,15 +146,20 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         result = c.fetchone()
         balance = result[0] if result else 0
     if text == "💳 کیف پول":
-        await update.message.reply_text(f"موجودی شما: {balance:,} تومان")
+        keyboard = [
+            [InlineKeyboardButton("افزایش موجودی 💸", callback_data="charge")],
+            [InlineKeyboardButton(f"موجودی: {balance:,} تومان", callback_data="balance_info")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("💳 وضعیت کیف پول:", reply_markup=reply_markup)
     elif text == "📚 راهنمایی":
-        await update.message.reply_text("برای راهنمایی، به پشتیبانی پیام بده!")
+        await update.message.reply_text("📖 برای راهنمایی، به پشتیبانی پیام بده!")
     elif text == "📞 پشتیبانی":
-        await update.message.reply_text("پیام خود را ارسال کنید.")
+        await update.message.reply_text("📩 پیام خودت رو بفرست، همکارانمون جواب می‌دن!")
     elif text == "👤 سرویس‌های من":
-        await update.message.reply_text("سرویس‌های فعال شما اینجا نمایش داده می‌شود.")
+        await update.message.reply_text("👀 سرویس‌های فعالت اینجا نمایش داده می‌شه (در حال توسعه).")
     elif text == "🎉 تست رایگان":
-        await update.message.reply_text("تست رایگان VPN 1 روزه فعال شد!")
+        await update.message.reply_text("🎁 تست رایگان VPN 1 روزه فعال شد!")
     elif text == "🌐 VPN":
         keyboard = [
             [InlineKeyboardButton("V2Ray", callback_data="vpn_v2ray")],
@@ -153,22 +167,22 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             [InlineKeyboardButton("OpenVPN", callback_data="vpn_openvpn")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("VPN رو انتخاب کن:", reply_markup=reply_markup)
+        await update.message.reply_text("🌐 VPN رو انتخاب کن:", reply_markup=reply_markup)
     elif text == "🎁 گیفت کارت":
         prices = get_setting("gift_card_prices")
         keyboard = [[InlineKeyboardButton(f"{int(k):,} تومان", callback_data=f"gift_{k}")] for k in prices.keys()]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("گیفت کارت رو انتخاب کن:", reply_markup=reply_markup)
+        await update.message.reply_text("🎁 گیفت کارت رو انتخاب کن:", reply_markup=reply_markup)
     elif text == "📱 شماره مجازی":
         prices = get_setting("virtual_number_prices")
         keyboard = [[InlineKeyboardButton(f"{v:,} تومان - {k}", callback_data=f"virtual_{k}")] for k, v in prices.items()]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("شماره مجازی رو انتخاب کن:", reply_markup=reply_markup)
+        await update.message.reply_text("📱 شماره مجازی رو انتخاب کن:", reply_markup=reply_markup)
     elif text == "🍎 اپل آیدی":
         regions = get_setting("apple_id_prices").keys()
         keyboard = [[InlineKeyboardButton(f"{r}", callback_data=f"apple_{r}")] for r in regions]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("ریجن اپل آیدی رو انتخاب کن:", reply_markup=reply_markup)
+        await update.message.reply_text("🍎 ریجن اپل آیدی رو انتخاب کن:", reply_markup=reply_markup)
 
 # Handle category callback
 async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -187,13 +201,13 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
             keyboard = [[InlineKeyboardButton(f"{k}GB - {v[1]:,}", callback_data=f"vpn_{protocol}_{k}_1"),
                         InlineKeyboardButton(f"{k}GB - {v[3]:,}", callback_data=f"vpn_{protocol}_{k}_3")] for k, v in prices.items()]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text(f"VPN {protocol} - 1 ماهه/3 ماهه:", reply_markup=reply_markup)
+            await query.message.reply_text(f"🌐 VPN {protocol} - 1 ماهه/3 ماهه:", reply_markup=reply_markup)
         elif data.startswith("apple_"):
             region = data.replace("apple_", "")
             prices = get_setting("apple_id_prices")[region]
             keyboard = [[InlineKeyboardButton(f"{k} تا - {v:,}", callback_data=f"apple_{region}_{k}")] for k, v in prices.items()]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text(f"اپل آیدی {region}:", reply_markup=reply_markup)
+            await query.message.reply_text(f"🍎 اپل آیدی {region}:", reply_markup=reply_markup)
         elif data.startswith("gift_"):
             amount = int(data.replace("gift_", ""))
             if balance >= amount:
@@ -201,7 +215,7 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
                           (amount, hashlib.md5(f"{uuid.uuid4()}".encode()).hexdigest()[:10], "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                 c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, user_id))
                 conn.commit()
-                await query.message.reply_text(f"گیفت کارت {amount:,} تومانی فعال شد!")
+                await query.message.reply_text(f"🎁 گیفت کارت {amount:,} تومانی فعال شد!")
             else:
                 await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=amount))
         elif data.startswith("virtual_"):
@@ -212,9 +226,28 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
                           (f"+{country}123456789", country, "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                 c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
                 conn.commit()
-                await query.message.reply_text(f"شماره مجازی {country} فعال شد!")
+                await query.message.reply_text(f"📱 شماره مجازی {country} فعال شد!")
             else:
                 await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=price))
+        elif data == "charge":
+            charge_options = get_setting("charge_options")
+            keyboard = [[InlineKeyboardButton(f"{amount:,} تومان", callback_data=f"charge_{amount}")] for amount in charge_options]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.message.reply_text("💸 مبلغ افزایش موجودی رو انتخاب کن:", reply_markup=reply_markup)
+        elif data.startswith("charge_"):
+            amount = int(data.replace("charge_", ""))
+            transaction_id = hashlib.md5(f"{user_id}{amount}{datetime.now()}".encode()).hexdigest()[:10]
+            with sqlite3.connect("shop.db") as conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO transactions (id, user_id, amount, type, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                          (transaction_id, user_id, amount, "charge", "pending", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                conn.commit()
+            await query.message.reply_text(f"💸 برای شارژ {amount:,} تومان، رسید پرداخت رو به ادمین (@k4lantar) بفرست. تراکنش: {transaction_id}")
+        elif data == "balance_info":
+            await query.message.reply_text(f"💳 موجودی فعلی شما: {balance:,} تومان")
+        elif data == "start_trial":
+            await query.message.delete()  # حذف پیام تریال
+            await show_intro(update.callback_query.message, context)
 
 # Admin menu
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -224,12 +257,8 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("پیام همگانی", callback_data="broadcast")],
         [InlineKeyboardButton("افزودن همکار", callback_data="add_admin")],
-        [InlineKeyboardButton("جستجوی سرویس", callback_data="search_service")],
-        [InlineKeyboardButton("افزایش موجودی", callback_data="add_balance")],
         [InlineKeyboardButton("تأیید پرداخت‌ها", callback_data="confirm_payments")],
-        [InlineKeyboardButton("آمار ربات", callback_data="bot_stats")],
-        [InlineKeyboardButton("آمار کاربران", callback_data="user_stats")],
-        [InlineKeyboardButton("منفی/مثبت موجودی", callback_data="adjust_balance")]
+        [InlineKeyboardButton("آمار ربات", callback_data="bot_stats")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("📊 پنل ادمین:", reply_markup=reply_markup)
@@ -239,42 +268,33 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    if str(user_id) != str(os.getenv("ADMIN_ID")):
+    if str(user_id) != str(ADMIN_ID):
         await query.message.reply_text("فقط ادمین اصلی!")
         return
     data = query.data
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         if data == "broadcast":
-            await query.message.reply_text("متن پیام رو ارسال کنید برای برادکست.")
+            await query.message.reply_text("متن پیام رو بفرست برای برادکست.")
             context.user_data["mode"] = "broadcast"
         elif data == "add_admin":
-            await query.message.reply_text("ID ادمین جدید رو ارسال کنید.")
+            await query.message.reply_text("ID ادمین جدید رو بفرست.")
             context.user_data["mode"] = "add_admin"
-        elif data == "search_service":
-            await query.message.reply_text("جستجوی سرویس فعال شد!")
-        elif data == "add_balance":
-            await query.message.reply_text("ID کاربر و مقدار رو ارسال کنید (مثال: 123 5000).")
-            context.user_data["mode"] = "add_balance"
         elif data == "confirm_payments":
-            await query.message.reply_text("لیست پرداخت‌های در انتظار:")
+            await query.message.reply_text("📋 پرداخت‌های در انتظار:")
             c.execute("SELECT * FROM transactions WHERE status = 'pending'")
             payments = c.fetchall()
             if payments:
-                response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]}" for p in payments])
-                await query.message.reply_text(response)
+                response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]:,}", for p in payments])
+                keyboard = [[InlineKeyboardButton(f"تأیید {p[0]}", callback_data=f"confirm_{p[0]}")] for p in payments]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.reply_text(response, reply_markup=reply_markup)
             else:
                 await query.message.reply_text("هیچ پرداختی در انتظار نیست.")
         elif data == "bot_stats":
             c.execute("SELECT COUNT(*) FROM users")
             user_count = c.fetchone()[0]
-            await query.message.reply_text(f"تعداد کاربران: {user_count}")
-        elif data == "user_stats":
-            await query.message.reply_text("ID کاربر رو ارسال کنید برای آمار.")
-            context.user_data["mode"] = "user_stats"
-        elif data == "adjust_balance":
-            await query.message.reply_text("ID کاربر و مقدار جدید رو ارسال کنید (مثال: 123 10000).")
-            context.user_data["mode"] = "adjust_balance"
+            await query.message.reply_text(f"👥 تعداد کاربران: {user_count}")
 
 # Handle payment confirmation
 async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -292,7 +312,7 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
         user_id, amount = c.fetchone()
         c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
         conn.commit()
-    await query.message.reply_text(f"تراکنش {data} تأیید شد!")
+    await query.message.reply_text(f"✅ تراکنش {data} تأیید شد!")
 
 # Error Handler
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -330,12 +350,12 @@ async def initialize_app():
         init_db()
         telegram_app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
         await telegram_app.initialize()
-        telegram_app.add_handler(ChatMemberHandler(handle_chat_member))
+        telegram_app.add_handler(ChatMemberHandler(handle_new_chat))  # پیام تریال برای چت جدید
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
-        telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
+        telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|confirm_payments|bot_stats$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
         telegram_app.add_error_handler(error_handler)
         logger.info("Setting webhook: %s", os.getenv("WEBHOOK_URL"))

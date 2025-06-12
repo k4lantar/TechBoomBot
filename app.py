@@ -125,6 +125,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text:
         return
+    logger.info(f"Received text: {text}, User ID: {user_id}, Admin ID: {ADMIN_ID}, Admin enabled: {get_setting('admin_commands_enabled')}")
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         c.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,))
@@ -137,6 +138,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif text in ["💳 کیف پول", "📚 راهنمایی", "📞 پشتیبانی", "👤 سرویس‌های من", "🎉 تست رایگان", "🌐 VPN", "🎁 گیفت کارت", "📱 شماره مجازی", "🍎 اپل آیدی"]:
                 await handle_category(update, context, text)
             elif text == "/admin" and str(user_id) == str(ADMIN_ID) and get_setting("admin_commands_enabled") == "1":
+                logger.info("Admin command triggered")
                 await show_admin_menu(update, context)
 
 # Handle category
@@ -354,6 +356,7 @@ async def initialize_app():
         await telegram_app.initialize()
         telegram_app.add_handler(ChatMemberHandler(handle_new_chat))
         telegram_app.add_handler(CommandHandler("start", show_intro))
+        telegram_app.add_handler(CommandHandler("admin", show_admin_menu))  # اضافه کردن Handler جداگانه برای /admin
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))

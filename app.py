@@ -379,13 +379,8 @@ def run_app():
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    # اجرای با Event Loop پایدار
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        hypercorn.asyncio.serve(app, config)
-    finally:
-        loop.close()
+    # اجرای صحیح سرور با asyncio.run
+    asyncio.run(hypercorn.asyncio.serve(app, config))
 
 if __name__ == "__main__":
     run_app()

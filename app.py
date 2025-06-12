@@ -17,9 +17,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # تنظیمات ربات
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "http://تویی_آی_پی:5000/webhook")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "123456789"))
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8030727817:AAEdnqRvVDUlOrrOrh7eTQdt2M_6AD0yC50")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/webhook")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
 

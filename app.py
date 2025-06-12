@@ -176,7 +176,8 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-        balance = c.fetchone()[0] if c.fetchone() else 0
+        result = c.fetchone()
+        balance = result[0] if result else 0
         if data.startswith("vpn_"):
             protocol = data.replace("vpn_", "")
             prices = get_setting("vpn_prices")[protocol]
@@ -290,6 +291,10 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
         conn.commit()
     await query.message.reply_text(f"تراکنش {data} تأیید شد!")
 
+# Error Handler
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 async def webhook():
@@ -328,7 +333,7 @@ async def initialize_app():
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
-        telegram_app.add_error_handler(error_handler)  # استفاده از تابع Error Handler
+        telegram_app.add_error_handler(error_handler)
         logger.info("Setting webhook: %s", os.getenv("WEBHOOK_URL"))
         await telegram_app.bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
         logger.info("Webhook set successfully")
@@ -336,16 +341,12 @@ async def initialize_app():
         logger.error("Error in initialize_app: %s", str(e))
         telegram_app = None
 
-# Error Handler
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error("Exception while handling an update:", exc_info=context.error)
-
 # Main function to run the app
 def run_app():
-    loop = asyncio.new_event_loop()  # ایجاد Event Loop جدید
+    loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(initialize_app())
+        asyncio.run(initialize_app())
         from hypercorn.config import Config
         from hypercorn.asyncio import serve
         config = Config()

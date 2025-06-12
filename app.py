@@ -346,11 +346,11 @@ async def initialize_app():
 
 # Main function to run the app
 def run_app():
-    import hypercorn.asyncio
+    import hypercorn
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    hypercorn.asyncio.serve(app, config)  # اجرای مستقیم بدون asyncio.run
+    hypercorn.run(app, config)  # اجرای همگام با hypercorn.run
 
 if __name__ == "__main__":
     run_app()

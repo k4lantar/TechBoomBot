@@ -126,9 +126,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await show_admin_menu(update, context)
 
 # Handle category
-async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = update.message.from_user.id
-    text = update.message.text
     with sqlite3.connect("shop.db") as conn:
         c = conn.cursor()
         c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))

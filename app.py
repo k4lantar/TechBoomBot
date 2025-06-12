@@ -285,7 +285,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             c.execute("SELECT * FROM transactions WHERE status = 'pending'")
             payments = c.fetchall()
             if payments:
-                response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]:,}", for p in payments])
+                response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]:,}" for p in payments])  # اصلاح نحو
                 keyboard = [[InlineKeyboardButton(f"تأیید {p[0]}", callback_data=f"confirm_{p[0]}")] for p in payments]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(response, reply_markup=reply_markup)

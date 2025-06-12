@@ -1,6 +1,6 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 import sqlite3
 from flask import Flask, request, jsonify
 import os
@@ -22,6 +22,7 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/w
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
+loop = asyncio.new_event_loop()
 
 # SQLite database setup
 def init_db():
@@ -255,7 +256,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data["mode"] = "add_balance"
         elif data == "confirm_payments":
             await query.message.reply_text("لیست پرداخت‌های در انتظار:")
-            c.execute("SELECT * FROM payments WHERE status = 'pending'")
+            c.execute("SELECT * FROM transactions WHERE status = 'pending'")
             payments = c.fetchall()
             if payments:
                 response = "\n".join([f"ID: {p[0]}, User: {p[1]}, Amount: {p[2]}" for p in payments])
@@ -325,7 +326,7 @@ async def initialize_app():
     global telegram_app
     try:
         init_db()
-        telegram_app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+        telegram_app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
@@ -343,15 +344,15 @@ async def initialize_app():
 
 # Main function to run the app
 def run_app():
-    loop = asyncio.new_event_loop()
+    global loop
     asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_app())
+    from hypercorn.config import Config
+    from hypercorn.asyncio import serve
+    config = Config()
+    port = int(os.environ.get("PORT", 5000))
+    config.bind = [f"0.0.0.0:{port}"]
     try:
-        asyncio.run(initialize_app())
-        from hypercorn.config import Config
-        from hypercorn.asyncio import serve
-        config = Config()
-        port = int(os.environ.get("PORT", 5000))
-        config.bind = [f"0.0.0.0:{port}"]
         loop.run_until_complete(serve(app, config))
     except Exception as e:
         logger.error("Error in run_app: %s", str(e))

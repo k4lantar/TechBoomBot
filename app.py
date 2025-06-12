@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 import hashlib
 import json
+import asyncio  # اضافه کردن این خط
 import logging
 
 # تنظیمات لگاری

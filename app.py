@@ -56,7 +56,7 @@ def init_db():
             })),
             ("gift_card_prices", json.dumps({20000: 20000, 30000: 30000, 50000: 50000, 100000: 100000, 200000: 200000})),
             ("virtual_number_prices", json.dumps({"US": 5000, "UK": 6000, "TR": 7000, "AE": 6500})),
-            ("charge_options", json.dumps([50000, 100000, 200000, 500000]))  # گزینه‌های افزایش موجودی
+            ("charge_options", json.dumps([50000, 100000, 200000, 500000]))
         ]
         c.executemany("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", default_settings)
         c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (ADMIN_ID,))
@@ -248,7 +248,7 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
         elif data == "balance_info":
             await query.message.reply_text(f"💳 موجودی فعلی شما: {balance:,} تومان")
         elif data == "start_trial":
-            await query.message.delete()  # حذف پیام تریال
+            await query.message.delete()
             await show_intro(update.callback_query.message, context)
 
 # Admin menu
@@ -334,8 +334,11 @@ async def webhook():
     update = telegram.Update.de_json(request.get_json(), telegram_app.bot)
     logger.info("Processing update: %s", update)
     try:
-        # استفاده از Event Loop پیش‌فرض
+        # استفاده از Loop فعلی و اجرای آسنکرون
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         await telegram_app.process_update(update)
     except Exception as e:
         logger.error("Error in webhook: %s", str(e))
@@ -376,8 +379,13 @@ def run_app():
     from hypercorn.config import Config
     config = Config()
     config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
-    # استفاده از Event Loop پیش‌فرض Hypercorn
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+    # اجرای با Event Loop پایدار
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        hypercorn.asyncio.serve(app, config)
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     run_app()

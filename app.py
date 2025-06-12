@@ -315,7 +315,25 @@ async def webhook():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200
+import sqlite3
+import os
 
+def init_db():
+    with sqlite3.connect("shop.db") as conn:
+        c = conn.cursor()
+        # ایجاد جدول کاربران
+        c.execute('''CREATE TABLE IF NOT EXISTS users
+                     (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0)''')
+        # ایجاد جدول پرداخت‌ها
+        c.execute('''CREATE TABLE IF NOT EXISTS payments
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount INTEGER, status TEXT DEFAULT 'pending')''')
+        # ایجاد جدول تنظیمات
+        c.execute('''CREATE TABLE IF NOT EXISTS settings
+                     (key TEXT PRIMARY KEY, value TEXT)''')
+        # افزودن مقدار پیش‌فرض برای menu_enabled
+        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("menu_enabled", "1"))
+        conn.commit()
+        
 # Initialize application
 import asyncio
 
@@ -324,10 +342,8 @@ telegram_app = None
 async def initialize_app():
     global telegram_app
     try:
-        init_db()
-        loop = asyncio.new_event_loop()  # ایجاد Event Loop جدید
-        asyncio.set_event_loop(loop)
-        telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+        init_db()  # فراخوانی تابع ساخت دیتابیس
+        telegram_app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
@@ -336,8 +352,8 @@ async def initialize_app():
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
         telegram_app.add_error_handler(lambda update, context: logger.error("Exception while handling an update:", exc_info=context.error))
-        logger.info("Setting webhook: %s", WEBHOOK_URL)
-        await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+        logger.info("Setting webhook: %s", os.getenv("WEBHOOK_URL"))
+        await telegram_app.bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
         logger.info("Webhook set successfully")
     except Exception as e:
         logger.error("Error in initialize_app: %s", str(e))

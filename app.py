@@ -132,7 +132,7 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         c = conn.cursor()
         c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         result = c.fetchone()
-        balance = result[0] if result else 0  # اگه نتیجه None بود، 0 برگردون
+        balance = result[0] if result else 0
     if text == "💳 کیف پول":
         await update.message.reply_text(f"موجودی شما: {balance:,} تومان")
     elif text == "📚 راهنمایی":
@@ -153,7 +153,7 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         await update.message.reply_text("VPN رو انتخاب کن:", reply_markup=reply_markup)
     elif text == "🎁 گیفت کارت":
         prices = get_setting("gift_card_prices")
-        keyboard = [[InlineKeyboardButton(f"{k:,} تومان", callback_data=f"gift_{k}")] for k in prices.keys()]
+        keyboard = [[InlineKeyboardButton(f"{int(k):,} تومان", callback_data=f"gift_{k}")] for k in prices.keys()]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("گیفت کارت رو انتخاب کن:", reply_markup=reply_markup)
     elif text == "📱 شماره مجازی":

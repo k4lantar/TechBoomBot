@@ -360,11 +360,13 @@ def health():
     return jsonify({"status": "healthy"}), 200
 
 # Initialize application
+import asyncio
 async def initialize_app():
     global telegram_app
     try:
         init_db()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()  # ایجاد یه Event Loop جدید
+        asyncio.set_event_loop(loop)
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))

@@ -5,11 +5,9 @@ import sqlite3
 from flask import Flask, request, jsonify
 import os
 import uuid
-import time
 from datetime import datetime
 import hashlib
 import json
-import asyncio
 import logging
 
 # تنظیمات لگاری
@@ -22,7 +20,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/w
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
-loop = asyncio.new_event_loop()
 
 # SQLite database setup
 def init_db():
@@ -344,20 +341,11 @@ async def initialize_app():
 
 # Main function to run the app
 def run_app():
-    global loop
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(initialize_app())
+    import hypercorn.asyncio
     from hypercorn.config import Config
-    from hypercorn.asyncio import serve
     config = Config()
-    port = int(os.environ.get("PORT", 5000))
-    config.bind = [f"0.0.0.0:{port}"]
-    try:
-        loop.run_until_complete(serve(app, config))
-    except Exception as e:
-        logger.error("Error in run_app: %s", str(e))
-    finally:
-        loop.close()
+    config.bind = [f"0.0.0.0:{os.environ.get('PORT', 5000)}"]
+    asyncio.run(hypercorn.asyncio.serve(app, config))
 
 if __name__ == "__main__":
     run_app()

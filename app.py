@@ -126,7 +126,7 @@ async def manage_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
     c.execute("SELECT user_id, username, is_blocked FROM users")
-    users =治療c.fetchall()
+    users = c.fetchall()
     conn.close()
 
     message = "👥 لیست کاربران:\n"
@@ -175,7 +175,7 @@ async def update_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         c.execute("UPDATE products SET price=? WHERE name=?", (price, product_name))
         conn.commit()
         conn.close()
-        await update.message.reply_text(f"✅ قیمت {product_name} به {price:,} تومان تغییر کرد!")
+        await update.message.reply_text f"✅ قیمت {product_name} به {price:,} تومان تغییر کرد!")
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید!")
     return ADMIN_PANEL

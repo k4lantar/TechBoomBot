@@ -220,6 +220,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await show_admin_menu(update, context)
                 elif text == "/restart" and user_id == ADMIN_ID:
                     await restart_db(update, context)
+                elif text == "/checkdb" and user_id == ADMIN_ID:
+                    await check_db(update, context)
                 elif context.user_data.get("mode"):
                     await handle_admin_input(update, context)
     except Exception as e:
@@ -320,6 +322,41 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in show_user_services for user {user_id}: {e}")
         await update.message.reply_text("❌ خطایی در نمایش سرویس‌ها رخ داد.")
+
+# چک کردن دیتابیس (برای ادمین)
+async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("فقط ادمین!")
+        return
+    try:
+        with sqlite3.connect("shop.db") as conn:
+            c = conn.cursor()
+            message = "📊 وضعیت دیتابیس:\n\n"
+            # کاربران
+            c.execute("SELECT COUNT(*) FROM users")
+            user_count = c.fetchone()[0]
+            message += f"👥 تعداد کاربران: {user_count}\n"
+            # اپل آیدی
+            c.execute("SELECT COUNT(*) FROM apple_ids WHERE status = 'active'")
+            apple_count = c.fetchone()[0]
+            message += f"🍎 تعداد اپل آیدی‌های فعال: {apple_count}\n"
+            # گیفت کارت
+            c.execute("SELECT COUNT(*) FROM gift_cards WHERE status = 'active'")
+            gift_count = c.fetchone()[0]
+            message += f"🎁 تعداد گیفت کارت‌های فعال: {gift_count}\n"
+            # VPN
+            c.execute("SELECT COUNT(*) FROM vpn_accounts WHERE status = 'active'")
+            vpn_count = c.fetchone()[0]
+            message += f"🌐 تعداد حساب‌های VPN فعال: {vpn_count}\n"
+            # شماره مجازی
+            c.execute("SELECT COUNT(*) FROM virtual_numbers WHERE status = 'active'")
+            number_count = c.fetchone()[0]
+            message += f"📱 تعداد شماره‌های مجازی فعال: {number_count}\n"
+            await update.message.reply_text(message)
+    except Exception as e:
+        logger.error(f"Error in check_db: {e}")
+        await update.message.reply_text(f"❌ خطا در چک کردن دیتابیس: {e}")
 
 # مدیریت ورودی‌های ادمین
 async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -517,7 +554,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 payments = c.fetchall()
                 if payments:
                     response = "📜 لیست پرداخت‌های در انتظار:\n"
-                    keyboard = [[InlineKeyboardButton(f"تأیید {p[11]}", callback_data=f"confirm_{p[0]}")] for p in payments]
+                    keyboard = [[InlineKeyboardButton(f"تأیید {p[0]}", callback_data=f"confirm_{p[0]}")] for p in payments]
                     response += "\n".join([f"ID: {p[0]} - کاربر: {p[1]} - مبلغ: {p[2]:,} تومان" for p in payments])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.message.reply_text(response, reply_markup=reply_markup)
@@ -563,7 +600,7 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
                 await query.message.reply_text("❌ تراکنش یافت نشد!")
     except Exception as e:
         logger.error(f"Error in handle_payment_callback for transaction {data}: {e}")
-        await query.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+        await update.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
 
 # ریست دیتابیس (برای ادمین)
 async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -591,12 +628,12 @@ async def webhook():
         if telegram_app is None:
             logger.error("Failed to initialize telegram_app")
             return jsonify({"error": "Bot initialization failed"}), 500
-        update = telegram.Update.de_json(request.get_json(), telegram_app.bot)
+        update = Update.de_json(request.get_json(), telegram_app.bot)
         logger.info("Processing update: %s", update)
         await telegram_app.process_update(update)
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
-        return jsonify({"error": "Internal Server Error"}), 500
+        return jsonify({"error": str(e)}), 500
     return jsonify({"status": "OK"}), 200
 
 # بررسی سلامت
@@ -612,6 +649,7 @@ async def initialize_app():
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
+        telegram_app.add_handler(CommandHandler("checkdb", check_db))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))

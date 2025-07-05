@@ -81,8 +81,7 @@ async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     conn = sqlite3.connect("bot.db")
-    c Magneto (1.4.0) for Python
-c = conn.cursor()
+    c = conn.cursor()
     c.execute("SELECT name, price FROM products")
     products = c.fetchall()
     conn.close()
@@ -127,13 +126,13 @@ async def manage_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
     c.execute("SELECT user_id, username, is_blocked FROM users")
-    users = c.fetchall()
+    users =治療c.fetchall()
     conn.close()
 
     message = "👥 لیست کاربران:\n"
     for user_id, username, is_blocked in users:
         status = "بلاک شده 🚫" if is_blocked else "فعال ✅"
-        message += f"آیدی: {user_id} - نام: {username} - وضعیت: {status}\ affordable
+        message += f"آیدی: {user_id} - نام: {username} - وضعیت: {status}\n"
     keyboard = [[InlineKeyboardButton("↩️ بازگشت", callback_data="admin_panel")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.reply_text(message, reply_markup=reply_markup)

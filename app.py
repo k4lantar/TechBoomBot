@@ -125,6 +125,8 @@ def init_db():
                       (50000, "SAMPLE-GIFT-001", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       (100000, "SAMPLE-GIFT-002", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                      (30000, f"USER-GIFT-{uuid.uuid4().hex[:10]}", "active", ADMIN_ID, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO apple_ids (email, password, questions, region, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                       ("sample1@apple.com", "pass123", "Q1:Ans1", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO apple_ids (email, password, questions, region, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -137,9 +139,6 @@ def init_db():
                       ("+123456789", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO virtual_numbers (number, country, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       ("+987654321", "UK", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            # اضافه کردن یک گیفت‌کارت نمونه برای کاربر
-            c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
-                      (30000, f"USER-GIFT-{uuid.uuid4().hex[:10]}", "active", ADMIN_ID, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
         logger.info("Database initialized successfully")
     except Exception as e:
@@ -163,18 +162,24 @@ def get_setting(key, default=None):
 
 # نمایش منوی اولیه
 async def show_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Showing intro for user {update.effective_user.id}")
+    user_id = update.effective_user.id
+    logger.info(f"Showing intro for user {user_id}")
     if get_setting("menu_enabled") == "0":
+        logger.info(f"Menu disabled for user {user_id}")
         await update.message.reply_text("منو موقتاً غیرفعاله!")
         return
     keyboard = [[KeyboardButton("📲 اشتراک شماره", request_contact=True)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    logger.info(f"Sending intro message to user {user_id}")
     await update.message.reply_text(get_setting("welcome_message"), reply_markup=reply_markup)
+    logger.info(f"Intro message sent to user {user_id}")
 
 # نمایش منوی اصلی
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Showing main menu for user {update.effective_user.id}")
+    user_id = update.effective_user.id
+    logger.info(f"Showing main menu for user {user_id}")
     if get_setting("menu_enabled") == "0":
+        logger.info(f"Menu disabled for user {user_id}")
         await update.message.reply_text("منو موقتاً غیرفعاله!")
         return
     keyboard = [
@@ -185,7 +190,9 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [KeyboardButton("🍎 اپل آیدی")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    logger.info(f"Sending main menu to user {user_id}")
     await update.message.reply_text("🔥 TechBoomBot! 🚀\nانتخاب کن:", reply_markup=reply_markup)
+    logger.info(f"Main menu sent to user {user_id}")
 
 # مدیریت تماس
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -195,6 +202,13 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with sqlite3.connect("shop.db") as conn:
             c = conn.cursor()
+            # چک کردن دیتابیس
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            if not c.fetchone():
+                logger.error(f"Users table not found for user {user_id}")
+                await update.message.reply_text("❌ خطای دیتابیس! لطفاً به ادمین اطلاع دهید.")
+                return
+            logger.info(f"Saving contact for user {user_id}")
             c.execute("INSERT OR REPLACE INTO users (user_id, phone, joined_at, balance) VALUES (?, ?, ?, ?)",
                       (user_id, phone, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 100000))
             conn.commit()
@@ -220,6 +234,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             c.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,))
             phone = c.fetchone()
             if not phone:
+                logger.info(f"No phone found for user {user_id}, showing intro")
                 await show_intro(update, context)
             else:
                 if text == "/start":
@@ -293,6 +308,7 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
 # نمایش سرویس‌های کاربر
 async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    logger.info(f"Showing user services for user {user_id}")
     try:
         with sqlite3.connect("shop.db") as conn:
             c = conn.cursor()
@@ -333,6 +349,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     message += f"ID: {number[0]} - شماره: {number[1]} - کشور: {number[2]} - وضعیت: {number[3]} - تاریخ: {number[4]}\n"
             else:
                 message += "\n📱 هیچ شماره مجازی فعالی ندارید.\n"
+            logger.info(f"Sending user services to user {user_id}: {message}")
             await update.message.reply_text(message)
     except Exception as e:
         logger.error(f"Error in show_user_services for user {user_id}: {e}")
@@ -388,6 +405,7 @@ async def show_all_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     message += f"ID: {number[0]} - شماره: {number[1]} - کشور: {number[2]} - وضعیت: {number[3]} - تاریخ: {number[4]} - کاربر: {user}\n"
             else:
                 message += "\n📱 هیچ شماره مجازی فعالی وجود ندارد.\n"
+            logger.info(f"Sending all services to admin {user_id}: {message}")
             await update.message.reply_text(message)
     except Exception as e:
         logger.error(f"Error in show_all_services: {e}")
@@ -423,6 +441,7 @@ async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             c.execute("SELECT COUNT(*) FROM virtual_numbers WHERE status = 'active'")
             number_count = c.fetchone()[0]
             message += f"📱 تعداد شماره‌های مجازی فعال: {number_count}\n"
+            logger.info(f"Sending database status to admin {user_id}: {message}")
             await update.message.reply_text(message)
     except Exception as e:
         logger.error(f"Error in check_db: {e}")
@@ -448,6 +467,7 @@ async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             c.execute("INSERT INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       (30000, f"USER-GIFT-{uuid.uuid4().hex[:10]}", "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
+        logger.info(f"User {user_id} reset successfully")
         await update.message.reply_text("✅ اطلاعات کاربر ریست شد و یک گیفت‌کارت نمونه اضافه شد!")
     except Exception as e:
         logger.error(f"Error in reset_user for user {user_id}: {e}")
@@ -628,6 +648,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⚖️ تنظیم موجودی", callback_data="adjust_balance")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    logger.info(f"Sending admin menu to user {update.message.from_user.id}")
     await update.message.reply_text("📊 پنل ادمین:", reply_markup=reply_markup)
 
 # مدیریت callbackهای ادمین
@@ -716,6 +737,7 @@ async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         os.remove("shop.db")
         init_db()
+        logger.info(f"Database reset by admin {user_id}")
         await update.message.reply_text("✅ دیتابیس با موفقیت ریست شد و محصولات نمونه اضافه شدند!")
     except Exception as e:
         logger.error(f"Error resetting database: {e}")
@@ -744,12 +766,13 @@ async def webhook():
         if update:
             logger.info(f"Processing update: {update}")
             await telegram_app.process_update(update)
+            logger.info(f"Update processed successfully")
         else:
             logger.error("Failed to parse update")
             return jsonify({"error": "Invalid update data"}), 400
         return jsonify({"status": "OK"}), 200
     except Exception as e:
-        logger.error(f"Error in webhook: {e}")
+        logger.error(f"Error in webhook: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 # بررسی سلامت
@@ -783,16 +806,21 @@ async def initialize_app():
 
 # اجرای برنامه
 def run_app():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        asyncio.run(initialize_app())
+        loop.run_until_complete(initialize_app())
         from hypercorn.config import Config
         from hypercorn.asyncio import serve
         config = Config()
         port = int(os.environ.get("PORT", 5000))
         config.bind = [f"0.0.0.0:{port}"]
-        asyncio.run(serve(app, config))
+        loop.run_until_complete(serve(app, config))
     except Exception as e:
         logger.error(f"Error in run_app: {e}")
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
 
 if __name__ == "__main__":
     run_app()

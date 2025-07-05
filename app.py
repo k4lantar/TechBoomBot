@@ -30,6 +30,7 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/w
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
+loop = None
 
 # تنظیمات دیتابیس
 def init_db():
@@ -225,6 +226,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await check_db(update, context)
                 elif text == "/showall" and user_id == ADMIN_ID:
                     await show_all_services(update, context)
+                elif text == "/resetuser" and user_id == ADMIN_ID:
+                    await reset_user(update, context)
                 elif context.user_data.get("mode"):
                     await handle_admin_input(update, context)
     except Exception as e:
@@ -417,6 +420,31 @@ async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in check_db: {e}")
         await update.message.reply_text(f"❌ خطا در چک کردن دیتابیس: {e}")
 
+# ریست کاربر (برای ادمین)
+async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("فقط ادمین!")
+        return
+    try:
+        with sqlite3.connect("shop.db") as conn:
+            c = conn.cursor()
+            # حذف محصولات کاربر
+            c.execute("DELETE FROM apple_ids WHERE user_id = ?", (user_id,))
+            c.execute("DELETE FROM gift_cards WHERE user_id = ?", (user_id,))
+            c.execute("DELETE FROM vpn_accounts WHERE user_id = ?", (user_id,))
+            c.execute("DELETE FROM virtual_numbers WHERE user_id = ?", (user_id,))
+            # تنظیم موجودی به 100,000 تومان
+            c.execute("UPDATE users SET balance = 100000 WHERE user_id = ?", (user_id,))
+            # اضافه کردن یک گیفت‌کارت نمونه برای کاربر
+            c.execute("INSERT INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                      (30000, f"USER-GIFT-{uuid.uuid4().hex[:10]}", "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
+        await update.message.reply_text("✅ اطلاعات کاربر ریست شد و یک گیفت‌کارت نمونه اضافه شد!")
+    except Exception as e:
+        logger.error(f"Error in reset_user for user {user_id}: {e}")
+        await update.message.reply_text(f"❌ خطا در ریست کاربر: {e}")
+
 # مدیریت ورودی‌های ادمین
 async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -502,6 +530,7 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
             c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
             result = c.fetchone()
             balance = result[0] if result else 0
+            logger.info(f"User {user_id} balance: {balance}")
             if data.startswith("vpn_"):
                 parts = data.split("_")
                 if len(parts) == 3:
@@ -514,11 +543,13 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
                 elif len(parts) == 4:
                     protocol, volume, duration = parts[1], parts[2], parts[3]
                     price = get_setting("vpn_prices")[protocol][volume][int(duration)]
+                    logger.info(f"Processing VPN purchase: protocol={protocol}, volume={volume}, duration={duration}, price={price}")
                     if balance >= price:
                         c.execute("INSERT INTO vpn_accounts (config, protocol, volume, duration, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                                   (f"config_{uuid.uuid4()}", protocol, volume, duration, "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                         c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
                         conn.commit()
+                        logger.info(f"VPN purchase completed for user {user_id}")
                         await query.message.reply_text(f"✅ VPN {protocol} ({volume}, {duration} ماه) فعال شد!")
                     else:
                         await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=price))
@@ -534,32 +565,38 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
                 elif len(parts) == 3:
                     region, count = parts[1], parts[2]
                     price = get_setting("apple_id_prices")[region][int(count)]
+                    logger.info(f"Processing Apple ID purchase: region={region}, count={count}, price={price}")
                     if balance >= price:
                         c.execute("INSERT INTO apple_ids (email, password, questions, region, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                                   (f"apple_{uuid.uuid4()}@example.com", "pass123", "Q1:Ans1", region, "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                         c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
                         conn.commit()
+                        logger.info(f"Apple ID purchase completed for user {user_id}")
                         await query.message.reply_text(f"✅ اپل آیدی {region} ({count} تا) فعال شد!")
                     else:
                         await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=price))
             elif data.startswith("gift_"):
                 amount = int(data.replace("gift_", ""))
+                logger.info(f"Processing gift card purchase: amount={amount}")
                 if balance >= amount:
                     c.execute("INSERT INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                               (amount, hashlib.md5(f"{uuid.uuid4()}".encode()).hexdigest()[:10], "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, user_id))
                     conn.commit()
+                    logger.info(f"Gift card purchase completed for user {user_id}")
                     await query.message.reply_text(f"✅ گیفت کارت {amount:,} تومانی فعال شد!")
                 else:
                     await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=amount))
             elif data.startswith("virtual_"):
                 country = data.replace("virtual_", "")
                 price = get_setting("virtual_number_prices")[country]
+                logger.info(f"Processing virtual number purchase: country={country}, price={price}")
                 if balance >= price:
                     c.execute("INSERT INTO virtual_numbers (number, country, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                               (f"+{country}{uuid.uuid4().int % 1000000000}", country, "active", user_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
                     conn.commit()
+                    logger.info(f"Virtual number purchase completed for user {user_id}")
                     await query.message.reply_text(f"✅ شماره مجازی {country} فعال شد!")
                 else:
                     await query.message.reply_text(get_setting("insufficient_balance_message").format(amount=price))
@@ -660,7 +697,7 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
                 await query.message.reply_text("❌ تراکنش یافت نشد!")
     except Exception as e:
         logger.error(f"Error in handle_payment_callback for transaction {data}: {e}")
-        await update.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+        await query.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
 
 # ریست دیتابیس (برای ادمین)
 async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -675,6 +712,12 @@ async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error resetting database: {e}")
         await update.message.reply_text(f"❌ خطا در ریست دیتابیس: {e}")
+
+# مدیریت خطا
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Update {update} caused error: {context.error}", exc_info=context.error)
+    if update and update.effective_message:
+        await update.effective_message.reply_text("❌ خطایی رخ داد. لطفاً دوباره امتحان کنید.")
 
 # وب‌هوک Flask
 @app.route('/webhook', methods=['POST'])
@@ -708,7 +751,7 @@ def health():
 
 # مقداردهی اولیه برنامه
 async def initialize_app():
-    global telegram_app
+    global telegram_app, loop
     try:
         init_db()
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -716,12 +759,13 @@ async def initialize_app():
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(CommandHandler("checkdb", check_db))
         telegram_app.add_handler(CommandHandler("showall", show_all_services))
+        telegram_app.add_handler(CommandHandler("resetuser", reset_user))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))
         telegram_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^broadcast|add_admin|search_service|add_balance|confirm_payments|bot_stats|user_stats|adjust_balance$"))
         telegram_app.add_handler(CallbackQueryHandler(handle_payment_callback, pattern="^confirm_"))
-        telegram_app.add_error_handler(lambda update, context: logger.error(f"Exception while handling an update: {context.error}", exc_info=context.error))
+        telegram_app.add_error_handler(error_handler)
         logger.info("Setting webhook: %s", WEBHOOK_URL)
         await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
         logger.info("Webhook set successfully")
@@ -731,8 +775,8 @@ async def initialize_app():
 
 # اجرای برنامه
 def run_app():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    global loop
+    loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(initialize_app())
         from hypercorn.config import Config
@@ -744,7 +788,9 @@ def run_app():
     except Exception as e:
         logger.error(f"Error in run_app: {e}")
     finally:
-        loop.close()
+        if not loop.is_closed():
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
 
 if __name__ == "__main__":
     run_app()

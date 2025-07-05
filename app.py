@@ -202,6 +202,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text
+    logger.info(f"Received text from user {user_id}: {text}")
     if not text:
         return
     try:
@@ -222,6 +223,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await restart_db(update, context)
                 elif text == "/checkdb" and user_id == ADMIN_ID:
                     await check_db(update, context)
+                elif text == "/showall" and user_id == ADMIN_ID:
+                    await show_all_services(update, context)
                 elif context.user_data.get("mode"):
                     await handle_admin_input(update, context)
     except Exception as e:
@@ -231,6 +234,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # مدیریت دسته‌بندی‌ها
 async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = update.message.from_user.id
+    logger.info(f"Handling category {text} for user {user_id}")
     try:
         with sqlite3.connect("shop.db") as conn:
             c = conn.cursor()
@@ -283,7 +287,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
             c = conn.cursor()
             message = "👤 سرویس‌های شما:\n\n"
             # اپل آیدی
-            c.execute("SELECT id, email, region, status, created_at FROM apple_ids WHERE user_id = ? AND status = 'active'", (user_id,))
+            c.execute("SELECT id, email, region, status, created_at FROM apple_ids WHERE (user_id = ? OR user_id IS NULL) AND status = 'active'", (user_id,))
             apple_ids = c.fetchall()
             if apple_ids:
                 message += "🍎 اپل آیدی‌ها:\n"
@@ -292,7 +296,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 message += "🍎 هیچ اپل آیدی فعالی ندارید.\n"
             # گیفت کارت
-            c.execute("SELECT id, amount, code, status, created_at FROM gift_cards WHERE user_id = ? AND status = 'active'", (user_id,))
+            c.execute("SELECT id, amount, code, status, created_at FROM gift_cards WHERE (user_id = ? OR user_id IS NULL) AND status = 'active'", (user_id,))
             gift_cards = c.fetchall()
             if gift_cards:
                 message += "\n🎁 گیفت کارت‌ها:\n"
@@ -301,7 +305,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 message += "\n🎁 هیچ گیفت کارتی ندارید.\n"
             # حساب VPN
-            c.execute("SELECT id, protocol, volume, duration, status, created_at FROM vpn_accounts WHERE user_id = ? AND status = 'active'", (user_id,))
+            c.execute("SELECT id, protocol, volume, duration, status, created_at FROM vpn_accounts WHERE (user_id = ? OR user_id IS NULL) AND status = 'active'", (user_id,))
             vpn_accounts = c.fetchall()
             if vpn_accounts:
                 message += "\n🌐 حساب‌های VPN:\n"
@@ -310,7 +314,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 message += "\n🌐 هیچ حساب VPN فعالی ندارید.\n"
             # شماره مجازی
-            c.execute("SELECT id, number, country, status, created_at FROM virtual_numbers WHERE user_id = ? AND status = 'active'", (user_id,))
+            c.execute("SELECT id, number, country, status, created_at FROM virtual_numbers WHERE (user_id = ? OR user_id IS NULL) AND status = 'active'", (user_id,))
             virtual_numbers = c.fetchall()
             if virtual_numbers:
                 message += "\n📱 شماره‌های مجازی:\n"
@@ -322,6 +326,61 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in show_user_services for user {user_id}: {e}")
         await update.message.reply_text("❌ خطایی در نمایش سرویس‌ها رخ داد.")
+
+# نمایش همه سرویس‌ها (برای ادمین)
+async def show_all_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("فقط ادمین!")
+        return
+    try:
+        with sqlite3.connect("shop.db") as conn:
+            c = conn.cursor()
+            message = "📦 همه سرویس‌های موجود در دیتابیس:\n\n"
+            # اپل آیدی
+            c.execute("SELECT id, email, region, status, created_at, user_id FROM apple_ids WHERE status = 'active'")
+            apple_ids = c.fetchall()
+            if apple_ids:
+                message += "🍎 اپل آیدی‌ها:\n"
+                for apple_id in apple_ids:
+                    user = apple_id[5] if apple_id[5] else "Sample"
+                    message += f"ID: {apple_id[0]} - ایمیل: {apple_id[1]} - ریجن: {apple_id[2]} - وضعیت: {apple_id[3]} - تاریخ: {apple_id[4]} - کاربر: {user}\n"
+            else:
+                message += "🍎 هیچ اپل آیدی فعالی وجود ندارد.\n"
+            # گیفت کارت
+            c.execute("SELECT id, amount, code, status, created_at, user_id FROM gift_cards WHERE status = 'active'")
+            gift_cards = c.fetchall()
+            if gift_cards:
+                message += "\n🎁 گیفت کارت‌ها:\n"
+                for gift_card in gift_cards:
+                    user = gift_card[5] if gift_card[5] else "Sample"
+                    message += f"ID: {gift_card[0]} - مبلغ: {gift_card[1]:,} تومان - کد: {gift_card[2]} - وضعیت: {gift_card[3]} - تاریخ: {gift_card[4]} - کاربر: {user}\n"
+            else:
+                message += "\n🎁 هیچ گیفت کارتی وجود ندارد.\n"
+            # حساب VPN
+            c.execute("SELECT id, protocol, volume, duration, status, created_at, user_id FROM vpn_accounts WHERE status = 'active'")
+            vpn_accounts = c.fetchall()
+            if vpn_accounts:
+                message += "\n🌐 حساب‌های VPN:\n"
+                for vpn in vpn_accounts:
+                    user = vpn[6] if vpn[6] else "Sample"
+                    message += f"ID: {vpn[0]} - پروتکل: {vpn[1]} - حجم: {vpn[2]} - مدت: {vpn[3]} ماه - وضعیت: {vpn[4]} - تاریخ: {vpn[5]} - کاربر: {user}\n"
+            else:
+                message += "\n🌐 هیچ حساب VPN فعالی وجود ندارد.\n"
+            # شماره مجازی
+            c.execute("SELECT id, number, country, status, created_at, user_id FROM virtual_numbers WHERE status = 'active'")
+            virtual_numbers = c.fetchall()
+            if virtual_numbers:
+                message += "\n📱 شماره‌های مجازی:\n"
+                for number in virtual_numbers:
+                    user = number[5] if number[5] else "Sample"
+                    message += f"ID: {number[0]} - شماره: {number[1]} - کشور: {number[2]} - وضعیت: {number[3]} - تاریخ: {number[4]} - کاربر: {user}\n"
+            else:
+                message += "\n📱 هیچ شماره مجازی فعالی وجود ندارد.\n"
+            await update.message.reply_text(message)
+    except Exception as e:
+        logger.error(f"Error in show_all_services: {e}")
+        await update.message.reply_text(f"❌ خطا در نمایش همه سرویس‌ها: {e}")
 
 # چک کردن دیتابیس (برای ادمین)
 async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -436,6 +495,7 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     user_id = query.from_user.id
     data = query.data
+    logger.info(f"Received callback query from user {user_id}: {data}")
     try:
         with sqlite3.connect("shop.db") as conn:
             c = conn.cursor()
@@ -620,7 +680,8 @@ async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     global telegram_app
-    logger.info("Webhook received: %s", request.get_json())
+    update_json = request.get_json()
+    logger.info(f"Webhook received: {update_json}")
     try:
         if telegram_app is None:
             logger.info("Initializing telegram_app...")
@@ -628,13 +689,17 @@ async def webhook():
         if telegram_app is None:
             logger.error("Failed to initialize telegram_app")
             return jsonify({"error": "Bot initialization failed"}), 500
-        update = Update.de_json(request.get_json(), telegram_app.bot)
-        logger.info("Processing update: %s", update)
-        await telegram_app.process_update(update)
+        update = Update.de_json(update_json, telegram_app.bot)
+        if update:
+            logger.info(f"Processing update: {update}")
+            await telegram_app.process_update(update)
+        else:
+            logger.error("Failed to parse update")
+            return jsonify({"error": "Invalid update data"}), 400
+        return jsonify({"status": "OK"}), 200
     except Exception as e:
         logger.error(f"Error in webhook: {e}")
         return jsonify({"error": str(e)}), 500
-    return jsonify({"status": "OK"}), 200
 
 # بررسی سلامت
 @app.route('/health', methods=['GET'])
@@ -650,6 +715,7 @@ async def initialize_app():
         await telegram_app.initialize()
         telegram_app.add_handler(CommandHandler("start", show_intro))
         telegram_app.add_handler(CommandHandler("checkdb", check_db))
+        telegram_app.add_handler(CommandHandler("showall", show_all_services))
         telegram_app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
         telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         telegram_app.add_handler(CallbackQueryHandler(handle_category_callback))

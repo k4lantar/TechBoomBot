@@ -175,7 +175,7 @@ async def update_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         c.execute("UPDATE products SET price=? WHERE name=?", (price, product_name))
         conn.commit()
         conn.close()
-        await update.message.reply_text f"✅ قیمت {product_name} به {price:,} تومان تغییر کرد!")
+        await update.message.reply_text(f"✅ قیمت {product_name} به {price:,} تومان تغییر کرد!")
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید!")
     return ADMIN_PANEL
@@ -216,7 +216,7 @@ async def add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def do_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = update.message.text
     context.user_data["new_product_name"] = product_name
-    await update.message.reply_text(f"💵 قیمت برای {product_name} (به تومان):")
+    await update.message.reply_text(f"💵 قیمت برای {product_PLAYnam} (به تومان):")
     return ADD_PRODUCT
 
 async def do_add_product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):

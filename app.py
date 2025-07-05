@@ -30,7 +30,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://techboom-bot.onrender.com/w
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "212874423"))
 app = Flask(__name__)
 telegram_app = None
-loop = None
 
 # تنظیمات دیتابیس
 def init_db():
@@ -138,6 +137,9 @@ def init_db():
                       ("+123456789", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO virtual_numbers (number, country, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       ("+987654321", "UK", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            # اضافه کردن یک گیفت‌کارت نمونه برای کاربر
+            c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                      (30000, f"USER-GIFT-{uuid.uuid4().hex[:10]}", "active", ADMIN_ID, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
         logger.info("Database initialized successfully")
     except Exception as e:
@@ -161,6 +163,7 @@ def get_setting(key, default=None):
 
 # نمایش منوی اولیه
 async def show_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Showing intro for user {update.effective_user.id}")
     if get_setting("menu_enabled") == "0":
         await update.message.reply_text("منو موقتاً غیرفعاله!")
         return
@@ -170,6 +173,7 @@ async def show_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # نمایش منوی اصلی
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Showing main menu for user {update.effective_user.id}")
     if get_setting("menu_enabled") == "0":
         await update.message.reply_text("منو موقتاً غیرفعاله!")
         return
@@ -187,16 +191,20 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     phone = update.message.contact.phone_number
+    logger.info(f"Handling contact for user {user_id}: phone={phone}")
     try:
         with sqlite3.connect("shop.db") as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO users (user_id, phone, joined_at) VALUES (?, ?, ?)",
-                      (user_id, phone, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR REPLACE INTO users (user_id, phone, joined_at, balance) VALUES (?, ?, ?, ?)",
+                      (user_id, phone, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 100000))
             conn.commit()
+        logger.info(f"Contact saved for user {user_id}")
         await update.message.reply_text(get_setting("contact_saved_message"))
+        logger.info(f"Sending main menu to user {user_id}")
         await show_main_menu(update, context)
+        logger.info(f"Main menu sent to user {user_id}")
     except Exception as e:
-        logger.error(f"Error handling contact for user {user_id}: {e}")
+        logger.error(f"Error handling contact for user {user_id}: {e}", exc_info=True)
         await update.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
 
 # مدیریت ورودی متن
@@ -715,7 +723,7 @@ async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # مدیریت خطا
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"Update {update} caused error: {context.error}", exc_info=context.error)
+    logger.error(f"Update {update} caused error: {context.error}", exc_info=True)
     if update and update.effective_message:
         await update.effective_message.reply_text("❌ خطایی رخ داد. لطفاً دوباره امتحان کنید.")
 
@@ -751,7 +759,7 @@ def health():
 
 # مقداردهی اولیه برنامه
 async def initialize_app():
-    global telegram_app, loop
+    global telegram_app
     try:
         init_db()
         telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -775,22 +783,16 @@ async def initialize_app():
 
 # اجرای برنامه
 def run_app():
-    global loop
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(initialize_app())
+        asyncio.run(initialize_app())
         from hypercorn.config import Config
         from hypercorn.asyncio import serve
         config = Config()
         port = int(os.environ.get("PORT", 5000))
         config.bind = [f"0.0.0.0:{port}"]
-        loop.run_until_complete(serve(app, config))
+        asyncio.run(serve(app, config))
     except Exception as e:
         logger.error(f"Error in run_app: {e}")
-    finally:
-        if not loop.is_closed():
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
 
 if __name__ == "__main__":
     run_app()

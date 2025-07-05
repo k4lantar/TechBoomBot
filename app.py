@@ -123,12 +123,20 @@ def init_db():
             # اضافه کردن محصولات نمونه
             c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       (50000, "SAMPLE-GIFT-001", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR IGNORE INTO gift_cards (amount, code, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                      (100000, "SAMPLE-GIFT-002", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO apple_ids (email, password, questions, region, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      ("sample@apple.com", "pass123", "Q1:Ans1", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                      ("sample1@apple.com", "pass123", "Q1:Ans1", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR IGNORE INTO apple_ids (email, password, questions, region, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      ("sample2@apple.com", "pass456", "Q2:Ans2", "UK", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO vpn_accounts (config, protocol, volume, duration, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      ("sample_config", "V2Ray", "10GB", 1, "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                      ("sample_config_v2ray", "V2Ray", "10GB", 1, "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR IGNORE INTO vpn_accounts (config, protocol, volume, duration, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      ("sample_config_openvpn", "OpenVPN", "50GB", 3, "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             c.execute("INSERT OR IGNORE INTO virtual_numbers (number, country, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
                       ("+123456789", "US", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            c.execute("INSERT OR IGNORE INTO virtual_numbers (number, country, status, user_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                      ("+987654321", "UK", "active", None, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
         logger.info("Database initialized successfully")
     except Exception as e:
@@ -253,9 +261,7 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             await update.message.reply_text("🎁 گیفت کارت رو انتخاب کن:", reply_markup=reply_markup)
         elif text == "📱 شماره مجازی":
             prices = get_setting("virtual_number_prices")
-            keyboard = [[InlineKeyboardButton(f"{v:,} تومان - {k}", callback_data=f"virtual_{k}")] for k,izează
-
-System: , v in prices.items()]
+            keyboard = [[InlineKeyboardButton(f"{k} - {v:,} تومان", callback_data=f"virtual_{k}")] for k, v in prices.items()]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("📱 شماره مجازی رو انتخاب کن:", reply_markup=reply_markup)
         elif text == "🍎 اپل آیدی":
@@ -266,6 +272,7 @@ System: , v in prices.items()]
     except Exception as e:
         logger.error(f"Error in handle_category for user {user_id}: {e}")
         await update.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+
 # نمایش سرویس‌های کاربر
 async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -313,6 +320,7 @@ async def show_user_services(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in show_user_services for user {user_id}: {e}")
         await update.message.reply_text("❌ خطایی در نمایش سرویس‌ها رخ داد.")
+
 # مدیریت ورودی‌های ادمین
 async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -384,6 +392,7 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in handle_admin_input for mode {mode}: {e}")
         await update.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+
 # مدیریت دسته‌بندی‌های callback
 async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -460,6 +469,7 @@ async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         logger.error(f"Error in handle_category_callback for user {user_id}: {e}")
         await query.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+
 # منوی ادمین
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if get_setting("admin_commands_enabled") == "0":
@@ -477,6 +487,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("📊 پنل ادمین:", reply_markup=reply_markup)
+
 # مدیریت callbackهای ادمین
 async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -506,7 +517,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 payments = c.fetchall()
                 if payments:
                     response = "📜 لیست پرداخت‌های در انتظار:\n"
-                    keyboard = [[InlineKeyboardButton(f"تأیید {p[0]}", callback_data=f"confirm_{p[0]}")] for p in payments]
+                    keyboard = [[InlineKeyboardButton(f"تأیید {p[11]}", callback_data=f"confirm_{p[0]}")] for p in payments]
                     response += "\n".join([f"ID: {p[0]} - کاربر: {p[1]} - مبلغ: {p[2]:,} تومان" for p in payments])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.message.reply_text(response, reply_markup=reply_markup)
@@ -527,6 +538,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"Error in handle_admin_callback for user {user_id}: {e}")
         await query.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+
 # مدیریت تأیید پرداخت
 async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -552,6 +564,7 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"Error in handle_payment_callback for transaction {data}: {e}")
         await query.message.reply_text("❌ خطایی رخ داد. دوباره امتحان کن!")
+
 # ریست دیتابیس (برای ادمین)
 async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -565,6 +578,7 @@ async def restart_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error resetting database: {e}")
         await update.message.reply_text(f"❌ خطا در ریست دیتابیس: {e}")
+
 # وب‌هوک Flask
 @app.route('/webhook', methods=['POST'])
 async def webhook():
@@ -584,10 +598,12 @@ async def webhook():
         logger.error(f"Error in webhook: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
     return jsonify({"status": "OK"}), 200
+
 # بررسی سلامت
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200
+
 # مقداردهی اولیه برنامه
 async def initialize_app():
     global telegram_app
@@ -608,6 +624,7 @@ async def initialize_app():
     except Exception as e:
         logger.error(f"Error in initialize_app: {e}")
         telegram_app = None
+
 # اجرای برنامه
 def run_app():
     loop = asyncio.new_event_loop()
@@ -624,5 +641,6 @@ def run_app():
         logger.error(f"Error in run_app: {e}")
     finally:
         loop.close()
+
 if __name__ == "__main__":
     run_app()
